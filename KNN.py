@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib as mpl
 import operator
+import csv
 
+LABELS = ['不喜欢','有些喜欢','非常喜欢']
 '''
 #准备数据，从文本文件中解析数据
 '''
@@ -29,7 +31,7 @@ def file2matrix(filename):
             listFromLine = line.split('\t')
             # 将数据前三列提取出来,存放到returnMat的NumPy矩阵中,也就是特征矩阵
             returnMat[index, :] = listFromLine[0:3]
-            # 根据文本中标记的喜欢的程度进行分类,1代表不喜欢,2代表魅力一般,3代表极具魅力
+            # 根据文本中标记的喜欢的程度进行分类,1代表不喜欢,2代表有些喜欢,3代表非常喜欢
             if listFromLine[-1] == 'didntLike':
                 classLabelVector.append(1)
             elif listFromLine[-1] == 'smallDoses':
@@ -95,9 +97,9 @@ def showdatas(datingDataMat, datingLabels):
     plt.setp(axs2_ylabel_text, size=10, weight='bold', color='black')
 
     #设置图例
-    didntLike = mlines.Line2D([], [], color='black', marker='.', markersize=6, label='不喜欢')
-    smallDoses = mlines.Line2D([], [], color='orange', marker='.',markersize=6, label='魅力一般')
-    largeDoses = mlines.Line2D([], [], color='red', marker='.',markersize=6, label='极具魅力')
+    didntLike = mlines.Line2D([], [], color='black', marker='.', markersize=6, label=LABELS[0])
+    smallDoses = mlines.Line2D([], [], color='orange', marker='.',markersize=6, label=LABELS[1])
+    largeDoses = mlines.Line2D([], [], color='red', marker='.',markersize=6, label=LABELS[2])
     #添加图例
     axs[0][0].legend(handles=[didntLike,smallDoses,largeDoses])
     axs[0][1].legend(handles=[didntLike,smallDoses,largeDoses])
@@ -167,13 +169,10 @@ def classify0(inX, dataSet, labels, k):
 '''
 #测试算法，计算分类器的准确率，验证分类器
 '''
-def datingClassTest():
-    #打开的文件名
-    filename = "datingTestSet.txt"
-    #将返回的特征矩阵和分类向量分别存储到datingDataMat和datingLabels中
-    datingDataMat, datingLabels = file2matrix(filename)
-    #取所有数据的百分之十
-    hoRatio = 0.10
+def datingClassTest(datingDataMat, datingLabels, saveCsvName, k, hoRatio = 0.10):
+    
+    #hoRatio = 0.10表示取所有数据的百分之十
+    
     #数据归一化,返回归一化后的矩阵,数据范围,数据最小值
     normMat, ranges, minVals = autoNorm(datingDataMat)
     #获得normMat的行数
@@ -185,49 +184,90 @@ def datingClassTest():
 
     for i in range(numTestVecs):
         #前numTestVecs个数据作为测试集,后m-numTestVecs个数据作为训练集
-        classifierResult = classify0(normMat[i,:], normMat[numTestVecs:m,:],datingLabels[numTestVecs:m], 4)
+        classifierResult = classify0(normMat[i,:], normMat[numTestVecs:m,:],datingLabels[numTestVecs:m], k)
         print("分类结果:%d\t真实类别:%d" % (classifierResult, datingLabels[i]))
+        csvWriter([classifierResult, datingLabels[i]], saveCsvName)
         if classifierResult != datingLabels[i]:
             errorCount += 1.0
-    print("错误率:%f%%" %(errorCount/float(numTestVecs)*100))
+    errorRate = errorCount/float(numTestVecs)*100
+    print("错误率:%f%%" %errorRate)
+    csvWriter(["错误率:", errorRate], saveCsvName)
+    return errorRate
 
-'''
-#使用算法，构建完整可用系统
-'''
-def classifyPerson():
-    #输出结果
-    resultList = ['不喜欢','有些喜欢','非常喜欢']
-    #三维特征用户输入
-    ffMiles = float(input("每年获得的飞行常客里程数:"))
-    precentTats = float(input("玩视频游戏所耗时间百分比:"))
-    iceCream = float(input("每周消费的冰激淋公升数:"))
-    #打开的文件名
-    filename = "datingTestSet.txt"
-    #打开并处理数 据
-    datingDataMat, datingLabels = file2matrix(filename)
+"""
+def dataMatMaker(datingDataMat, datingLabels):
+    pass
+     
+    
+"""
+
+def classifyPerson(datingDataMat, datingLabels, testDataMat, resultList, k):
+    """
+    三参数直接自矩阵化的数据集输入，支持用户指定数据输入
+    # testDataMat即三维特征用户输入
+    # ffMiles = float()#每年获得的飞行常客里程数
+    # precentTats = float()#玩视频游戏所耗时间百分比
+    # iceCream = float()#每周消费的冰激淋公升数
+    """
     #训练集归一化
     normMat, ranges, minVals = autoNorm(datingDataMat)
     #生成NumPy数组,测试集
-    inArr = np.array([ffMiles,precentTats, iceCream])
+    inArr = np.array(testDataMat)
     #测试集归一化
     norminArr = (inArr - minVals) / ranges
     #返回分类结果
-    classifierResult = classify0(norminArr, normMat, datingLabels, 3)
+    classifierResult = classify0(norminArr, normMat, datingLabels, k)
     #打印结果
     print("你可能%s这个人" % (resultList[classifierResult-1]))
 
+def csvWriter(record_list, csvname, mode="a"):
+    #通用写入csv文件操作
+    with open(csvname, mode, encoding='utf-8', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(record_list)
 
+def kIteration(max_k = 5):
+    return [k for k in range(1,max_k+1)]  
+    #通过指定k值上限制作k值实验组的迭代器
+
+def knnTest(datingDataMat, datingLabels, resultCsv, k_iter, hoRatio, test_times=10):
+    #用以批量测试k值对分类的影响
+    #不同的k操作同一个测试集
+    csvWriter(["实验次数","k=","错误率"], "errorRate.csv", "w")    #创建错误率记录文件头
+    for flag in range(test_times):
+        min_error = 100.0
+        min_error_flag = 0
+        min_error_k = 0
+        for k in k_iter:
+            saveCsvName = resultCsv+str(flag+1)+"_k_"+str(k)+".csv"
+            csvWriter(["分类结果","真实类别"], saveCsvName, "w")    #创建记录文件头
+            errorRate = datingClassTest(datingDataMat, datingLabels, saveCsvName, k, hoRatio)
+            csvWriter([flag+1,k,errorRate], "errorRate.csv")
+            if errorRate < min_error:
+                min_error = errorRate
+                min_error_flag = flag
+                min_error_k = k
+        
+    csvWriter([("实验次数",min_error_flag+1),("k",min_error_k),("最小错误率",min_error)], "errorRate.csv")
 '''
 #主函数，测试以上各个步骤，并输出各个步骤的结果
 '''
 if __name__ == '__main__':
-    #打开的文件名
-    filename = "datingTestSet.txt"
-    #打开并处理数据
+    
+    filename = "datingTestSet.txt"  #数据集文件名
+    testCsvName = "classify_tests.csv"
+    resultCsv = "results/classify_result"   #指定测试保存文件名
+    #csvWriter(["分类结果","真实类别"], testCsvName, "w")    #创建测试记录表
+    max_k = 5                       #指定测试k值的上限
+    hoRatio = 0.15                  #指定测试集比例
+    
+    k_iter = kIteration(max_k)
     datingDataMat, datingLabels = file2matrix(filename)
-    #数据可视化
-    showdatas(datingDataMat, datingLabels)
-    #验证分类器
-    datingClassTest()
-    #使用分类器
-    classifyPerson()
+    #将返回的特征矩阵和分类向量分别存储到datingDataMat和datingLabels中
+    showdatas(datingDataMat, datingLabels)  #数据可视化
+    
+    #datingClassTest(datingDataMat, datingLabels, testCsvName, 4)   
+    #取k=4验证分类器
+    knnTest(datingDataMat, datingLabels, resultCsv, k_iter, hoRatio, test_times=10)
+    #使用分类器批量测试
+    #classifyPerson(datingDataMat, datingLabels, testDataMat, LABELS, k)
